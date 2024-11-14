@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "signal.h": "c",
+        "string.h": "c",
+        "history.h": "c",
+        "typeinfo": "c"
+    }
+}
