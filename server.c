@@ -217,6 +217,7 @@ int id_exists(const char *name){
 int verify_user(char *user_name, char *user_password){
    FILE *fp = fopen("user.txt", "r");
    if(fp == NULL){
+      fclose(fp);
       perror("open user.txt error");
       return 0;
    }
@@ -262,14 +263,14 @@ int main(void)
    sigemptyset(&sa.sa_mask);
    sa.sa_flags = 0;
     
-    if (sigaction(SIGINT, &sa, NULL) == -1) {
-        perror("sigaction SIGINT");
-        exit(1);
-    }
-    if (sigaction(SIGTERM, &sa, NULL) == -1) {
-        perror("sigaction SIGTERM");
-        exit(1);
-    }
+   if (sigaction(SIGINT, &sa, NULL) == -1) {
+      perror("sigaction SIGINT");
+      exit(1);
+   }
+   if (sigaction(SIGTERM, &sa, NULL) == -1) {
+      perror("sigaction SIGTERM");
+      exit(1);
+   }
 
    ep_fd = epoll_create(MAX_EVENTS); // 创建红黑树,返回给全局变量ep_fd;
    if (ep_fd <= 0)
@@ -590,16 +591,22 @@ void recvdata(int client_fd, int event, void *arg)
                   int send_fd = -1;
                   char *msg_content = NULL;
                   int found_user = 0;
+
                   int i;
                   for(i = 1; ev->m_buf[i] != ' ' && i < 32 && i < strlen(ev->m_buf); i++) {
                      send_name[i-1] = ev->m_buf[i];
                   }
-                  send_name[i-1] = '\0';  
+                  send_name[i-1] = '\0'; 
 
                   //获取消息内容
                   msg_content = strchr(ev->m_buf +1 ,' ');
                   if(msg_content == NULL){// 
-
+                     char error_msg[64] = {0};
+                     snprintf(error_msg, sizeof(error_msg), "私聊格式不正确\n");
+                     send(ev->m_fd, error_msg, strlen(error_msg), 0);
+                     eventset(ev, client_fd, recvdata, ev);
+                     eventadd(ep_fd, EPOLLIN, ev);
+                     break;
                   }
                   msg_content++; // 跳过空格
                   msg_content[strcspn(msg_content, "\n")] = 0;
@@ -615,6 +622,15 @@ void recvdata(int client_fd, int event, void *arg)
                      
                      char error_msg[64] = {0};
                      snprintf(error_msg, sizeof(error_msg), "用户 %s 不存在或已离线\n", send_name);
+                     send(ev->m_fd, error_msg, strlen(error_msg), 0);
+                     eventset(ev, client_fd, recvdata, ev);
+                     eventadd(ep_fd, EPOLLIN, ev);
+                     break;
+                  }
+
+                  if(ev->m_fd == send_fd){
+                     char error_msg[64] = {0};
+                     snprintf(error_msg, sizeof(error_msg), "不能私信自己\n");
                      send(ev->m_fd, error_msg, strlen(error_msg), 0);
                      eventset(ev, client_fd, recvdata, ev);
                      eventadd(ep_fd, EPOLLIN, ev);
